@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import UdpSocket from 'react-native-udp';
 import { NetworkInfo } from 'react-native-network-info';
 
@@ -11,6 +11,7 @@ export default function App() {
   const [mensaje, setMensaje] = useState('');
   const [ipServer, setIpServer] = useState('');
   const [typedText, setTypedText] = useState('');
+  const [socketConnected, setSocketConnected] = useState(false);
 
   useEffect(() => {
     const fetchIpAddress = async () => {
@@ -37,15 +38,36 @@ export default function App() {
       setSocket(server);
     } else {
       setConnectionStatus('Servidor desconectado');
-      const client = UdpSocket.createSocket('udp4');
-      client.bind(8887);
-      setSocket(client);
     }
 
     return () => {
-      socket && socket.close();
+      if (socket) {
+        socket.close();
+        setSocketConnected(false);
+      }
     };
   }, [isServer]);
+
+  const connectToServer = () => {
+    if (!isServer && ipServer.trim() !== '') {
+      const client = UdpSocket.createSocket('udp4');
+
+      client.bind(8887, () => {
+        console.log('Cliente conectado');
+        setSocketConnected(true);
+      });
+
+      setSocket(client);
+    }
+  };
+
+  const disconnectFromServer = () => {
+    if (socket) {
+      socket.close();
+      setSocket(null);
+      setSocketConnected(false);
+    }
+  };
 
   const handleTextChange = (text) => {
     setTypedText(text);
@@ -61,16 +83,18 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Keylogger</Text>
-      
-      <TouchableOpacity
-        style={styles.toggleButton}
-        onPress={() => setIsServer(!isServer)}
-      >
-        <Text style={styles.toggleButtonText}>
-          {isServer ? 'Detener Servidor' : 'Iniciar Servidor'}
-        </Text>
-      </TouchableOpacity>
+      <Text style={styles.title}>Comunicación UDP</Text>
+
+      {!socketConnected && (
+        <TouchableOpacity
+          style={styles.toggleButton}
+          onPress={() => setIsServer(!isServer)}
+        >
+          <Text style={styles.toggleButtonText}>
+            {isServer ? 'Detener Servidor' : 'Iniciar Servidor'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {isServer ? (
         <View style={styles.serverContainer}>
@@ -89,12 +113,24 @@ export default function App() {
             placeholder="Ej: 192.168.1.100"
             style={styles.input}
           />
+          {!socketConnected ? (
+            <TouchableOpacity style={styles.connectButton} onPress={connectToServer}>
+              <Text style={styles.connectButtonText}>Conectar</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.disconnectButton} onPress={disconnectFromServer}>
+              <Text style={styles.disconnectButtonText}>Desconectar</Text>
+            </TouchableOpacity>
+          )}
+
           <TextInput
             placeholder="Escribe aquí..."
             value={typedText}
             onChangeText={handleTextChange}
             style={styles.input}
           />
+
+          {socketConnected && <Text style={styles.connected}>✅ Socket Conectado</Text>}
         </View>
       )}
     </View>
@@ -172,5 +208,34 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 10,
   },
+  connectButton: {
+    backgroundColor: '#00ffcc',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  connectButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#121212',
+  },
+  disconnectButton: {
+    backgroundColor: '#ff4444',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  disconnectButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  connected: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#00ffcc',
+    fontWeight: 'bold',
+  },
 });
-
