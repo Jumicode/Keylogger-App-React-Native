@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Button, TextInput } from 'react-native';
 import UdpSocket from 'react-native-udp';
 import { NetworkInfo } from 'react-native-network-info';
+
 export default function App() {
   const [isServer, setIsServer] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('');
-  const [socket, setSocket] = useState('');
+  const [socket, setSocket] = useState(null);
   const [ipAddress, setIpAddress] = useState('');
   const [mensaje, setMensaje] = useState('');
-  const [ipServer, setIpServer] = React.useState('IP Server');
+  const [ipServer, setIpServer] = useState('');
+  const [typedText, setTypedText] = useState('');
+
   useEffect(() => {
     const fetchIpAddress = async () => {
       const ip = await NetworkInfo.getIPV4Address();
@@ -22,15 +25,8 @@ export default function App() {
       const server = UdpSocket.createSocket('udp4');
 
       server.on('message', (data, rinfo) => {
-        setMensaje(data.toString())
-        server.send('¡Hola desde el servidor!', undefined, undefined, rinfo?.port, rinfo?.address, (error) => {
-          if (error) {
-            console.log('Error al enviar el mensaje:', error);
-          } else {
-            console.log('Mensaje enviado correctamente');
-          }
-        });
-        console.log('Mensaje recibido:', data.toString());
+        setMensaje(data.toString()); // Mostrar el texto completo actualizado
+        console.log('Texto recibido:', data.toString());
       });
 
       server.on('listening', () => {
@@ -39,10 +35,9 @@ export default function App() {
       });
 
       server.bind(8888);
-
       setSocket(server);
     } else {
-      setConnectionStatus(`Servidor desconectado`);
+      setConnectionStatus('Servidor desconectado');
       // Configura la aplicación como cliente
       const client = UdpSocket.createSocket('udp4');
       client.bind(8887);
@@ -54,37 +49,53 @@ export default function App() {
     };
   }, [isServer]);
 
-  const sendMessage = () => {
-    if (isServer) return;
+  const handleTextChange = (text) => {
+    setTypedText(text);
 
-    const client = socket;
-
-    client.send('¡Hola desde el cliente!', undefined, undefined, 8888, ipServer, (error) => {
-      if (error) {
-        console.log('Error al enviar el mensaje:', error);
-      } else {
-        console.log('Mensaje enviado correctamente');
-      }
-    });
-    client.on('message', async (message, remoteInfo) => {
-        setMensaje(message.toString())
+    if (!isServer && socket && ipServer) {
+      socket.send(text, undefined, undefined, 8888, ipServer, (error) => {
+        if (error) {
+          console.log('Error al enviar texto:', error);
+        }
       });
+    }
   };
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
       <Text>{connectionStatus}</Text>
+      
       <Button
         title={isServer ? 'Detener Servidor' : 'Iniciar Servidor'}
         onPress={() => setIsServer(!isServer)}
       />
-      <Button title="Enviar Mensaje" onPress={sendMessage} disabled={isServer} />
-      <TextInput
-        onChangeText={setIpServer}
-        value={ipServer}
-      />
-      <Text>Dirección IP: {ipAddress}</Text>
-      <Text>Mensaje recibído: {mensaje}</Text>
+
+      {!isServer && (
+        <>
+          <Text>Ingresa la IP del Servidor:</Text>
+          <TextInput 
+            onChangeText={setIpServer} 
+            value={ipServer} 
+            placeholder="Ejemplo: 192.168.1.100"
+            style={{ borderWidth: 1, width: 200, marginBottom: 10, padding: 5 }}
+          />
+          <TextInput
+            placeholder="Escribe aquí..."
+            value={typedText}
+            onChangeText={handleTextChange}
+            style={{ borderWidth: 1, width: 200, padding: 5 }}
+          />
+        </>
+      )}
+
+      {isServer && (
+        <>
+          <Text>IP del Servidor: {ipAddress}</Text>
+          <Text>Texto recibido:</Text>
+          <Text>{mensaje}</Text>
+        </>
+      )}
     </View>
   );
 }
+
