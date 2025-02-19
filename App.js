@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import UdpSocket from 'react-native-udp';
 import { NetworkInfo } from 'react-native-network-info';
 
@@ -8,10 +8,10 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState('');
   const [socket, setSocket] = useState(null);
   const [ipAddress, setIpAddress] = useState('');
-  const [mensaje, setMensaje] = useState('');
   const [ipServer, setIpServer] = useState('');
   const [typedText, setTypedText] = useState('');
   const [socketConnected, setSocketConnected] = useState(false);
+  const [logs, setLogs] = useState([]); // Lista para almacenar logs
 
   useEffect(() => {
     const fetchIpAddress = async () => {
@@ -25,8 +25,11 @@ export default function App() {
       const server = UdpSocket.createSocket('udp4');
 
       server.on('message', (data, rinfo) => {
-        setMensaje(data.toString());
-        console.log('Texto recibido:', data.toString());
+        const logEntry = `[${new Date().toLocaleTimeString()}] ${rinfo.address}: ${data.toString()}`;
+        
+        setLogs((prevLogs) => [...prevLogs, logEntry]); // Agregar el log a la lista
+        
+        console.log(logEntry); // También mostrarlo en la consola
       });
 
       server.on('listening', () => {
@@ -83,7 +86,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Comunicación UDP</Text>
+      <Text style={styles.title}>Keylogger</Text>
 
       {!socketConnected && (
         <TouchableOpacity
@@ -101,8 +104,13 @@ export default function App() {
           <Text style={styles.status}>{connectionStatus}</Text>
           <Text style={styles.label}>IP del Servidor:</Text>
           <Text style={styles.info}>{ipAddress}</Text>
-          <Text style={styles.label}>Texto recibido:</Text>
-          <Text style={styles.message}>{mensaje}</Text>
+          
+          <Text style={styles.label}> Entrada del cliente:</Text>
+          <ScrollView style={styles.logsContainer}>
+            {logs.map((log, index) => (
+              <Text key={index} style={styles.logText}>{log}</Text>
+            ))}
+          </ScrollView>
         </View>
       ) : (
         <View style={styles.clientContainer}>
@@ -193,12 +201,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
   },
-  message: {
-    fontSize: 16,
-    color: '#ffcc00',
-    fontWeight: 'bold',
-    textAlign: 'center',
+  logsContainer: {
+    width: '100%',
+    maxHeight: 200,
     marginTop: 10,
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 5,
+  },
+  logText: {
+    color: '#0f0',
+    fontSize: 14,
   },
   input: {
     width: '90%',
