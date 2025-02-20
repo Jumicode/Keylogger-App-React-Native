@@ -167,7 +167,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Comunicación UDP</Text>
+      <Text style={styles.title}>keylogger</Text>
 
       {/* Botón para iniciar/detener servidor solo se muestra si el cliente no está conectado */}
       {!socketConnected && (
