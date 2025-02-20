@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  PermissionsAndroid, 
+  Platform 
+} from 'react-native';
 import UdpSocket from 'react-native-udp';
 import { NetworkInfo } from 'react-native-network-info';
+import Geolocation from '@react-native-community/geolocation';
 
 export default function App() {
+  // Estados de la comunicación UDP y keylogger
   const [isServer, setIsServer] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('');
   const [socket, setSocket] = useState(null);
@@ -11,7 +22,14 @@ export default function App() {
   const [ipServer, setIpServer] = useState('');
   const [typedText, setTypedText] = useState('');
   const [socketConnected, setSocketConnected] = useState(false);
-  const [logs, setLogs] = useState([]); // Lista para almacenar logs
+  const [logs, setLogs] = useState([]); // Historial de mensajes recibidos
+
+  // Estados para la geolocalización
+  const [currentLongitude, setCurrentLongitude] = useState('...');
+  const [currentLatitude, setCurrentLatitude] = useState('...');
+  const [locationStatus, setLocationStatus] = useState('');
+  
+  let watchID = null; // Para almacenar el identificador de la suscripción de ubicación
 
   useEffect(() => {
     const fetchIpAddress = async () => {
@@ -26,10 +44,8 @@ export default function App() {
 
       server.on('message', (data, rinfo) => {
         const logEntry = `[${new Date().toLocaleTimeString()}] ${rinfo.address}: ${data.toString()}`;
-        
-        setLogs((prevLogs) => [...prevLogs, logEntry]); // Agregar el log a la lista
-        
-        console.log(logEntry); // También mostrarlo en la consola
+        setLogs(prevLogs => [...prevLogs, logEntry]);
+        console.log(logEntry);
       });
 
       server.on('listening', () => {
@@ -48,9 +64,13 @@ export default function App() {
         socket.close();
         setSocketConnected(false);
       }
+      if (watchID !== null) {
+        Geolocation.clearWatch(watchID);
+      }
     };
   }, [isServer]);
 
+  // Función para conectar el cliente
   const connectToServer = () => {
     if (!isServer && ipServer.trim() !== '') {
       const client = UdpSocket.createSocket('udp4');
@@ -64,6 +84,7 @@ export default function App() {
     }
   };
 
+  // Función para desconectar el cliente
   const disconnectFromServer = () => {
     if (socket) {
       socket.close();
@@ -72,6 +93,7 @@ export default function App() {
     }
   };
 
+  // Función que envía el texto cada vez que se actualiza el TextInput (keylogger)
   const handleTextChange = (text) => {
     setTypedText(text);
 
@@ -84,10 +106,70 @@ export default function App() {
     }
   };
 
+  // Funciones de geolocalización
+  const requestLocationPermission = async () => {
+    if (Platform.OS === 'ios') {
+      getOneTimeLocation();
+      subscribeLocationLocation();
+    } else {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Access Required',
+            message: 'This App needs to Access your location',
+          },
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          getOneTimeLocation();
+          subscribeLocationLocation();
+        } else {
+          setLocationStatus('Permission Denied');
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  };
+
+  const getOneTimeLocation = () => {
+    setLocationStatus('Getting Location ...');
+    Geolocation.getCurrentPosition(
+      (position) => {
+        setLocationStatus('You are Here');
+        const currentLongitude = JSON.stringify(position.coords.longitude);
+        const currentLatitude = JSON.stringify(position.coords.latitude);
+        setCurrentLongitude(currentLongitude);
+        setCurrentLatitude(currentLatitude);
+      },
+      (error) => {
+        setLocationStatus(error.message);
+      },
+      { enableHighAccuracy: false, timeout: 30000, maximumAge: 1000 }
+    );
+  };
+
+  const subscribeLocationLocation = () => {
+    watchID = Geolocation.watchPosition(
+      (position) => {
+        setLocationStatus('You are Here');
+        const currentLongitude = JSON.stringify(position.coords.longitude);
+        const currentLatitude = JSON.stringify(position.coords.latitude);
+        setCurrentLongitude(currentLongitude);
+        setCurrentLatitude(currentLatitude);
+      },
+      (error) => {
+        setLocationStatus(error.message);
+      },
+      { enableHighAccuracy: false, maximumAge: 1000 }
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Keylogger</Text>
+      <Text style={styles.title}>Comunicación UDP</Text>
 
+      {/* Botón para iniciar/detener servidor solo se muestra si el cliente no está conectado */}
       {!socketConnected && (
         <TouchableOpacity
           style={styles.toggleButton}
@@ -105,12 +187,22 @@ export default function App() {
           <Text style={styles.label}>IP del Servidor:</Text>
           <Text style={styles.info}>{ipAddress}</Text>
           
-          <Text style={styles.label}> Entrada del cliente:</Text>
+          <Text style={styles.label}>Entradas del teclado del cliente:</Text>
           <ScrollView style={styles.logsContainer}>
             {logs.map((log, index) => (
               <Text key={index} style={styles.logText}>{log}</Text>
             ))}
           </ScrollView>
+
+          {/* Botón para obtener ubicación */}
+          <TouchableOpacity style={styles.locationButton} onPress={requestLocationPermission}>
+            <Text style={styles.locationButtonText}>Obtener Ubicación del cliente</Text>
+          </TouchableOpacity>
+          
+          {/* Mostrar la información de ubicación */}
+          <Text style={styles.locationText}>Coordenadas del cliente:</Text>
+          <Text style={styles.locationText}>Longitude: {currentLongitude}</Text>
+          <Text style={styles.locationText}>Latitude: {currentLatitude}</Text>
         </View>
       ) : (
         <View style={styles.clientContainer}>
@@ -145,7 +237,7 @@ export default function App() {
   );
 }
 
-// 💠 Estilos mejorados
+// Estilos para la UI
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -250,5 +342,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#00ffcc',
     fontWeight: 'bold',
+  },
+  locationButton: {
+    backgroundColor: '#00ffcc',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 15,
+  },
+  locationButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#121212',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#ffffff',
+    marginTop: 10,
   },
 });
