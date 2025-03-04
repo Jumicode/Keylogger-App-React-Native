@@ -144,7 +144,7 @@ export default function App() {
     setLocationStatus('Getting Location ...');
     Geolocation.getCurrentPosition(
       (position) => {
-        setLocationStatus('You are Here');
+        setLocationStatus('Coordenadas del cliente :');
         const currentLongitude = JSON.stringify(position.coords.longitude);
         const currentLatitude = JSON.stringify(position.coords.latitude);
         setCurrentLongitude(currentLongitude);
