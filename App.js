@@ -1,5 +1,4 @@
-// Importación de módulos y componentes necesarios
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -10,69 +9,59 @@ import {
   PermissionsAndroid, 
   Platform 
 } from 'react-native';
-import UdpSocket from 'react-native-udp'; // Para la comunicación UDP
-import { NetworkInfo } from 'react-native-network-info'; // Para obtener la IP del dispositivo
-import Geolocation from '@react-native-community/geolocation'; // Para obtener la ubicación
+import UdpSocket from 'react-native-udp';
+import { NetworkInfo } from 'react-native-network-info';
+import Geolocation from '@react-native-community/geolocation';
 
 export default function App() {
-  // Estados para la comunicación UDP y funcionalidad keylogger
-  const [isServer, setIsServer] = useState(false); // Determina si se actúa como servidor o cliente
-  const [connectionStatus, setConnectionStatus] = useState(''); // Estado del socket/servidor
-  const [socket, setSocket] = useState(null); // Objeto socket
-  const [ipAddress, setIpAddress] = useState(''); // Dirección IP del dispositivo (cuando actúa como servidor)
-  const [ipServer, setIpServer] = useState(''); // IP del servidor a conectarse (para el cliente)
-  const [typedText, setTypedText] = useState(''); // Texto escrito por el usuario (keylogger)
-  const [socketConnected, setSocketConnected] = useState(false); // Estado de conexión del socket
-  const [logs, setLogs] = useState([]); // Historial de mensajes recibidos (logs)
+  // Estados de la comunicación UDP y keylogger
+  const [isServer, setIsServer] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
+  const [socket, setSocket] = useState(null);
+  const [ipAddress, setIpAddress] = useState('');
+  const [ipServer, setIpServer] = useState('');
+  const [typedText, setTypedText] = useState('');
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [logs, setLogs] = useState([]); // Historial de mensajes recibidos
 
   // Estados para la geolocalización
-  const [currentLongitude, setCurrentLongitude] = useState('...'); // Longitud actual
-  const [currentLatitude, setCurrentLatitude] = useState('...');   // Latitud actual
-  const [locationStatus, setLocationStatus] = useState(''); // Estado de la ubicación
+  const [currentLongitude, setCurrentLongitude] = useState('...');
+  const [currentLatitude, setCurrentLatitude] = useState('...');
+  const [locationStatus, setLocationStatus] = useState('');
+  
+  let watchID = null; // Para almacenar el identificador de la suscripción de ubicación
 
-  let watchID = null; // Identificador para la suscripción de geolocalización
+  // Referencia al ScrollView para auto-scroll
+  const scrollViewRef = useRef();
 
-  // useEffect se ejecuta al cambiar el estado "isServer"
   useEffect(() => {
-    // Función asíncrona para obtener la dirección IP del dispositivo
     const fetchIpAddress = async () => {
       const ip = await NetworkInfo.getIPV4Address();
       setIpAddress(ip);
     };
 
-    // Llamar a la función para establecer la IP
     fetchIpAddress();
 
-    // Si se ha seleccionado el modo servidor
     if (isServer) {
-      // Se crea un socket UDP para actuar como servidor
       const server = UdpSocket.createSocket('udp4');
 
-      // Evento que se dispara al recibir un mensaje del cliente
       server.on('message', (data, rinfo) => {
-        // Se crea un registro con la hora, dirección y mensaje recibido
         const logEntry = `[${new Date().toLocaleTimeString()}] ${rinfo.address}: ${data.toString()}`;
-        // Se agrega el registro al estado de logs
         setLogs(prevLogs => [...prevLogs, logEntry]);
         console.log(logEntry);
       });
 
-      // Evento que se dispara cuando el servidor comienza a escuchar en un puerto
       server.on('listening', () => {
         console.log('Servidor escuchando en el puerto:', server.address().port);
         setConnectionStatus(`Servidor en el puerto ${server.address().port}`);
       });
 
-      // Se enlaza el socket al puerto 8888 (para el servidor)
       server.bind(8888);
-      // Guardar el socket en el estado
       setSocket(server);
     } else {
-      // Si no es servidor, se establece el estado de conexión
       setConnectionStatus('Servidor desconectado');
     }
 
-    // Función de limpieza: cierra el socket y detiene la suscripción de geolocalización al desmontar o cambiar el modo
     return () => {
       if (socket) {
         socket.close();
@@ -82,40 +71,40 @@ export default function App() {
         Geolocation.clearWatch(watchID);
       }
     };
-  }, [isServer]); // Se ejecuta cuando cambia isServer
+  }, [isServer]);
 
-  // Función para conectar el cliente al servidor
+  // Efecto para auto-scroll al final del ScrollView cuando se actualizan los logs
+  useEffect(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, [logs]);
+
+  // Función para conectar el cliente
   const connectToServer = () => {
     if (!isServer && ipServer.trim() !== '') {
-      // Se crea un socket UDP para el cliente
       const client = UdpSocket.createSocket('udp4');
 
-      // Se enlaza el socket del cliente al puerto 8887
       client.bind(8887, () => {
         console.log('Cliente conectado');
-        setSocketConnected(true); // Se marca como conectado
+        setSocketConnected(true);
       });
 
-      // Guardar el socket en el estado
       setSocket(client);
     }
   };
 
-  // Función para desconectar el cliente del servidor
+  // Función para desconectar el cliente
   const disconnectFromServer = () => {
     if (socket) {
-      socket.close(); // Cierra el socket
+      socket.close();
       setSocket(null);
-      setSocketConnected(false); // Actualiza el estado a desconectado
+      setSocketConnected(false);
     }
   };
 
-  // Función que envía el texto escrito en tiempo real (keylogger)
+  // Función que envía el texto cada vez que se actualiza el TextInput (keylogger)
   const handleTextChange = (text) => {
-    // Actualiza el estado con el texto ingresado
     setTypedText(text);
 
-    // Si se actúa como cliente, se envía el texto al servidor mediante el socket UDP
     if (!isServer && socket && ipServer) {
       socket.send(text, undefined, undefined, 8888, ipServer, (error) => {
         if (error) {
@@ -125,17 +114,13 @@ export default function App() {
     }
   };
 
-  // Funciones para la geolocalización:
-
-  // Solicita permisos de ubicación y, si se conceden, obtiene la ubicación
+  // Funciones de geolocalización
   const requestLocationPermission = async () => {
     if (Platform.OS === 'ios') {
-      // En iOS se obtiene la ubicación directamente
       getOneTimeLocation();
       subscribeLocationLocation();
     } else {
       try {
-        // En Android se solicita el permiso de ubicación
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
@@ -144,7 +129,6 @@ export default function App() {
           },
         );
         if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          // Si se concede el permiso, se obtienen los datos de ubicación
           getOneTimeLocation();
           subscribeLocationLocation();
         } else {
@@ -156,16 +140,13 @@ export default function App() {
     }
   };
 
-  // Función para obtener la ubicación actual una sola vez
   const getOneTimeLocation = () => {
     setLocationStatus('Getting Location ...');
     Geolocation.getCurrentPosition(
       (position) => {
         setLocationStatus('You are Here');
-        // Se obtienen y formatean la longitud y latitud
         const currentLongitude = JSON.stringify(position.coords.longitude);
         const currentLatitude = JSON.stringify(position.coords.latitude);
-        // Se actualizan los estados correspondientes
         setCurrentLongitude(currentLongitude);
         setCurrentLatitude(currentLatitude);
       },
@@ -176,12 +157,10 @@ export default function App() {
     );
   };
 
-  // Función para suscribirse a cambios en la ubicación (actualización en tiempo real)
   const subscribeLocationLocation = () => {
     watchID = Geolocation.watchPosition(
       (position) => {
         setLocationStatus('You are Here');
-        // Se obtienen y actualizan la longitud y latitud
         const currentLongitude = JSON.stringify(position.coords.longitude);
         const currentLatitude = JSON.stringify(position.coords.latitude);
         setCurrentLongitude(currentLongitude);
@@ -195,12 +174,10 @@ export default function App() {
   };
 
   return (
-    // Contenedor principal de la aplicación
     <View style={styles.container}>
-      {/* Título de la aplicación */}
-      <Text style={styles.title}>keylogger</Text>
+      <Text style={styles.title}>Keylogger</Text>
 
-      {/* Botón para iniciar/detener el servidor, visible solo si el cliente no está conectado */}
+      {/* Botón para iniciar/detener servidor solo se muestra si el cliente no está conectado */}
       {!socketConnected && (
         <TouchableOpacity
           style={styles.toggleButton}
@@ -212,37 +189,31 @@ export default function App() {
         </TouchableOpacity>
       )}
 
-      {/* Si se actúa como servidor, se muestra la interfaz del servidor */}
       {isServer ? (
         <View style={styles.serverContainer}>
-          {/* Muestra el estado de la conexión del servidor */}
           <Text style={styles.status}>{connectionStatus}</Text>
-          {/* Muestra la IP del servidor */}
           <Text style={styles.label}>IP del Servidor:</Text>
           <Text style={styles.info}>{ipAddress}</Text>
           
-          {/* Muestra el historial de mensajes recibidos (entradas del teclado del cliente) */}
-          <Text style={styles.label}>Entradas del teclado del cliente:</Text>
-          <ScrollView style={styles.logsContainer}>
+          <Text style={styles.label}>Entradas del cliente:</Text>
+          <ScrollView style={styles.logsContainer} ref={scrollViewRef}>
             {logs.map((log, index) => (
               <Text key={index} style={styles.logText}>{log}</Text>
             ))}
           </ScrollView>
 
-          {/* Botón para solicitar la ubicación del cliente */}
+          {/* Botón para obtener ubicación */}
           <TouchableOpacity style={styles.locationButton} onPress={requestLocationPermission}>
-            <Text style={styles.locationButtonText}>Obtener Ubicación del cliente</Text>
+            <Text style={styles.locationButtonText}>Obtener Ubicación</Text>
           </TouchableOpacity>
           
-          {/* Muestra la información de la ubicación obtenida */}
-          <Text style={styles.locationText}>Coordenadas del cliente:</Text>
+          {/* Mostrar la información de ubicación */}
+          <Text style={styles.locationText}>Estado: {locationStatus}</Text>
           <Text style={styles.locationText}>Longitude: {currentLongitude}</Text>
           <Text style={styles.locationText}>Latitude: {currentLatitude}</Text>
         </View>
       ) : (
-        // Si se actúa como cliente, se muestra la interfaz del cliente
         <View style={styles.clientContainer}>
-          {/* Campo para ingresar la IP del servidor */}
           <Text style={styles.label}>IP del Servidor:</Text>
           <TextInput 
             onChangeText={setIpServer} 
@@ -250,7 +221,6 @@ export default function App() {
             placeholder="Ej: 192.168.1.100"
             style={styles.input}
           />
-          {/* Botón para conectar o desconectar según el estado del socket */}
           {!socketConnected ? (
             <TouchableOpacity style={styles.connectButton} onPress={connectToServer}>
               <Text style={styles.connectButtonText}>Conectar</Text>
@@ -261,7 +231,6 @@ export default function App() {
             </TouchableOpacity>
           )}
 
-          {/* Campo de texto para ingresar y enviar información (keylogger) */}
           <TextInput
             placeholder="Escribe aquí..."
             value={typedText}
@@ -269,7 +238,6 @@ export default function App() {
             style={styles.input}
           />
 
-          {/* Muestra el estado del socket cuando está conectado */}
           {socketConnected && <Text style={styles.connected}>✅ Socket Conectado</Text>}
         </View>
       )}
@@ -277,11 +245,11 @@ export default function App() {
   );
 }
 
-// Definición de estilos para la interfaz de usuario
+// Estilos para la UI
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212', // Fondo oscuro
+    backgroundColor: '#121212',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
