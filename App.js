@@ -160,7 +160,7 @@ export default function App() {
   const subscribeLocationLocation = () => {
     watchID = Geolocation.watchPosition(
       (position) => {
-        setLocationStatus('You are Here');
+        setLocationStatus('Coordenadas del cliente : ');
         const currentLongitude = JSON.stringify(position.coords.longitude);
         const currentLatitude = JSON.stringify(position.coords.latitude);
         setCurrentLongitude(currentLongitude);
